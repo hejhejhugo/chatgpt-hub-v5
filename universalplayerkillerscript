@@ -1,0 +1,132 @@
+-- Universal AutoFarm Players GUI with Team Check
+-- Works in all games
+
+-- // GUI Setup
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local Toggle = Instance.new("TextButton")
+local TeamCheckBtn = Instance.new("TextButton")
+
+ScreenGui.Parent = game:GetService("CoreGui")
+Frame.Parent = ScreenGui
+Toggle.Parent = Frame
+TeamCheckBtn.Parent = Frame
+
+ScreenGui.Name = "UniversalPlayerFarm"
+Frame.Size = UDim2.new(0, 180, 0, 90)
+Frame.Position = UDim2.new(0.1, 0, 0.1, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+Toggle.Size = UDim2.new(1, 0, 0.5, 0)
+Toggle.Text = "AutoFarm Players: OFF"
+Toggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+Toggle.Font = Enum.Font.SourceSansBold
+Toggle.TextScaled = true
+
+TeamCheckBtn.Size = UDim2.new(1, 0, 0.5, 0)
+TeamCheckBtn.Position = UDim2.new(0, 0, 0.5, 0)
+TeamCheckBtn.Text = "Team Check: OFF"
+TeamCheckBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+TeamCheckBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TeamCheckBtn.Font = Enum.Font.SourceSansBold
+TeamCheckBtn.TextScaled = true
+
+-- // Variables
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local farming = false
+local attacking = false
+local teamCheck = false
+
+-- // Find Nearest Player
+local function getNearestPlayer()
+    local closest, dist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer 
+        and plr.Character 
+        and plr.Character:FindFirstChild("HumanoidRootPart") 
+        and plr.Character:FindFirstChild("Humanoid") 
+        and plr.Character.Humanoid.Health > 0 then
+            
+            -- Team Check filter
+            if not teamCheck or plr.Team ~= LocalPlayer.Team then
+                local mag = (plr.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if mag < dist then
+                    dist = mag
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- // Auto Click Function
+local function autoClickTool()
+    if attacking then return end
+    attacking = true
+    task.spawn(function()
+        while farming do
+            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                pcall(function()
+                    tool:Activate()
+                end)
+            end
+            task.wait(0.03) -- ~30 clicks per second
+        end
+        attacking = false
+    end)
+end
+
+-- // Farming Loop
+local function startFarming()
+    farming = true
+    autoClickTool()
+    task.spawn(function()
+        while farming and task.wait() do
+            local target = getNearestPlayer()
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3) -- behind
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, target.Character.HumanoidRootPart.Position)
+                end
+            end
+        end
+    end)
+end
+
+local function stopFarming()
+    farming = false
+end
+
+-- // GUI Buttons
+Toggle.MouseButton1Click:Connect(function()
+    farming = not farming
+    if farming then
+        Toggle.Text = "AutoFarm Players: ON"
+        startFarming()
+    else
+        Toggle.Text = "AutoFarm Players: OFF"
+        stopFarming()
+    end
+end)
+
+TeamCheckBtn.MouseButton1Click:Connect(function()
+    teamCheck = not teamCheck
+    if teamCheck then
+        TeamCheckBtn.Text = "Team Check: ON"
+    else
+        TeamCheckBtn.Text = "Team Check: OFF"
+    end
+end)
+
+-- // Auto Respawn Support
+LocalPlayer.CharacterAdded:Connect(function()
+    if farming then
+        task.wait(10) -- wait 10s before restarting
+        startFarming()
+    end
+end)
