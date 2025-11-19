@@ -1,0 +1,300 @@
+-- Universal Blox Fruits Script (GUI + Autofarm + Chestfarm + AutoBounty)
+-- If you want me to connect this to your old Universal AutoFarm HUB, tell me.
+
+-- // GUI SETUP
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 420, 0, 320)
+Main.Position = UDim2.new(0.3,0,0.3,0)
+Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Main.Active = true
+Main.Draggable = true
+
+local MinBtn = Instance.new("TextButton", Main)
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1,-35,0,5)
+MinBtn.Text = "-"
+MinBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+MinBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+local Minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
+-- Tab Buttons
+local Tabs = Instance.new("Frame", Main)
+Tabs.Size = UDim2.new(0,120,1,0)
+Tabs.BackgroundColor3 = Color3.fromRGB(30,30,30)
+
+local function CreateTabButton(name, order)
+    local b = Instance.new("TextButton", Tabs)
+    b.Size = UDim2.new(1,0,0,40)
+    b.Position = UDim2.new(0,0,0, 10 + (order-1)*45)
+    b.Text = name
+    b.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    return b
+end
+
+local AutoFarmTabBtn = CreateTabButton("AutoFarm", 1)
+local ChestFarmTabBtn = CreateTabButton("ChestFarm", 2)
+local BountyTabBtn    = CreateTabButton("Auto Bounty", 3)
+
+-- Tab frames
+local AutoFarmTab = Instance.new("Frame", Main)
+AutoFarmTab.Size = UDim2.new(1,-120,1,0)
+AutoFarmTab.Position = UDim2.new(0,120,0,0)
+AutoFarmTab.BackgroundColor3 = Color3.fromRGB(20,20,20)
+AutoFarmTab.Visible = true
+
+local ChestFarmTab = AutoFarmTab:Clone()
+ChestFarmTab.Parent = Main
+ChestFarmTab.Visible = false
+
+local BountyTab = AutoFarmTab:Clone()
+BountyTab.Parent = Main
+BountyTab.Visible = false
+
+-- switching tabs
+AutoFarmTabBtn.MouseButton1Click:Connect(function()
+    AutoFarmTab.Visible = true
+    ChestFarmTab.Visible = false
+    BountyTab.Visible = false
+end)
+ChestFarmTabBtn.MouseButton1Click:Connect(function()
+    AutoFarmTab.Visible = false
+    ChestFarmTab.Visible = true
+    BountyTab.Visible = false
+end)
+BountyTabBtn.MouseButton1Click:Connect(function()
+    AutoFarmTab.Visible = false
+    ChestFarmTab.Visible = false
+    BountyTab.Visible = true
+end)
+
+------------------------------------------------------------------
+-- 🔥 AUTO FARM TAB
+------------------------------------------------------------------
+
+local SearchBox = Instance.new("TextBox", AutoFarmTab)
+SearchBox.Size = UDim2.new(1,-20,0,30)
+SearchBox.Position = UDim2.new(0,10,0,10)
+SearchBox.PlaceholderText = "Search NPC..."
+SearchBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+SearchBox.TextColor3 = Color3.fromRGB(255,255,255)
+
+local NPCList = Instance.new("ScrollingFrame", AutoFarmTab)
+NPCList.Size = UDim2.new(1,-20,1,-90)
+NPCList.Position = UDim2.new(0,10,0,50)
+NPCList.CanvasSize = UDim2.new(0,0,0,0)
+NPCList.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local SelectedNPC = nil
+
+-- generate npc list
+local allNPCs = {}
+for _,v in pairs(game:GetService("Workspace").Enemies:GetChildren()) do
+    allNPCs[v.Name] = true
+end
+
+local function RefreshList(filter)
+    NPCList:ClearAllChildren()
+    local y = 0
+    for name,_ in pairs(allNPCs) do
+        if not filter or string.find(string.lower(name), string.lower(filter)) then
+            local b = Instance.new("TextButton", NPCList)
+            b.Size = UDim2.new(1,0,0,30)
+            b.Position = UDim2.new(0,0,0,y)
+            b.Text = name
+            b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            b.TextColor3 = Color3.fromRGB(255,255,255)
+            y = y + 35
+
+            b.MouseButton1Click:Connect(function()
+                SelectedNPC = name
+            end)
+        end
+    end
+    NPCList.CanvasSize = UDim2.new(0,0,0,y)
+end
+
+RefreshList()
+
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    RefreshList(SearchBox.Text)
+end)
+
+-- Start Autofarm button
+local StartAF = Instance.new("TextButton", AutoFarmTab)
+StartAF.Size = UDim2.new(1,-20,0,40)
+StartAF.Position = UDim2.new(0,10,1,-50)
+StartAF.Text = "Start AutoFarm"
+StartAF.BackgroundColor3 = Color3.fromRGB(60,60,60)
+StartAF.TextColor3 = Color3.fromRGB(255,255,255)
+
+-- autofarm vars
+local farming = false
+
+local function NoclipLoop()
+    while farming do
+        pcall(function()
+            for _,v in pairs(game:GetService("Players").LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end)
+        task.wait()
+    end
+end
+
+local function AutoClick()
+    while farming do
+        pcall(function()
+            mouse1click() -- mobile-safe autoclick (Delta supports it)
+        end)
+        task.wait(0.01)
+    end
+end
+
+local function FlyTo(pos)
+    local hrp = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+    local bv = Instance.new("BodyVelocity", hrp)
+    bv.Velocity = (pos - hrp.Position).unit * 80
+    bv.MaxForce = Vector3.new(1e6,1e6,1e6)
+    task.wait((pos - hrp.Position).Magnitude / 80)
+    bv:Destroy()
+end
+
+local function GetAllTargets()
+    local targets = {}
+    for _,v in pairs(game.Workspace.Enemies:GetChildren()) do
+        if v.Name == SelectedNPC and v:FindFirstChild("HumanoidRootPart") then
+            table.insert(targets, v)
+        end
+    end
+    return targets
+end
+
+StartAF.MouseButton1Click:Connect(function()
+    if not SelectedNPC then return end
+
+    farming = not farming
+    StartAF.Text = farming and "Stop AutoFarm" or "Start AutoFarm"
+
+    if farming then
+        task.spawn(NoclipLoop)
+        task.spawn(AutoClick)
+
+        while farming do
+            local targets = GetAllTargets()
+            if #targets == 0 then
+                task.wait(1)
+            else
+                for _,mob in ipairs(targets) do
+                    if mob:FindFirstChild("HumanoidRootPart") then
+                        local pos = mob.HumanoidRootPart.Position + Vector3.new(0,-5,0)
+                        FlyTo(pos)
+                        while mob and mob.Humanoid.Health > 0 and farming do
+                            task.wait()
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end
+end)
+
+------------------------------------------------------------------
+-- 💰 CHEST FARM TAB
+------------------------------------------------------------------
+
+local ChestBtn = Instance.new("TextButton", ChestFarmTab)
+ChestBtn.Size = UDim2.new(1,-20,0,60)
+ChestBtn.Position = UDim2.new(0,10,0,20)
+ChestBtn.Text = "Start Chest Farm"
+ChestBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+ChestBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+local chestFarm = false
+
+ChestBtn.MouseButton1Click:Connect(function()
+    chestFarm = not chestFarm
+    ChestBtn.Text = chestFarm and "Stop Chest Farm" or "Start Chest Farm"
+
+    while chestFarm do
+        for _,v in pairs(game.Workspace:GetDescendants()) do
+            if v.Name:lower():find("chest") and v:IsA("Part") then
+                FlyTo(v.Position + Vector3.new(0,3,0))
+                task.wait(0.2)
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+------------------------------------------------------------------
+-- 🎯 AUTO BOUNTY TAB
+------------------------------------------------------------------
+
+local PlayerList = Instance.new("ScrollingFrame", BountyTab)
+PlayerList.Size = UDim2.new(1,-20,1,-90)
+PlayerList.Position = UDim2.new(0,10,0,10)
+PlayerList.CanvasSize = UDim2.new(0,0,0,0)
+PlayerList.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local SelectedPlayer = nil
+
+local function RefreshPlayers()
+    PlayerList:ClearAllChildren()
+    local y = 0
+    for _,plr in pairs(game.Players:GetPlayers()) do
+        if plr ~= game.Players.LocalPlayer then
+            local b = Instance.new("TextButton", PlayerList)
+            b.Size = UDim2.new(1,0,0,30)
+            b.Position = UDim2.new(0,0,0,y)
+            b.Text = plr.Name
+            b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            b.TextColor3 = Color3.fromRGB(255,255,255)
+            y = y + 35
+
+            b.MouseButton1Click:Connect(function()
+                SelectedPlayer = plr
+            end)
+        end
+    end
+    PlayerList.CanvasSize = UDim2.new(0,0,0,y)
+end
+
+RefreshPlayers()
+
+game.Players.PlayerAdded:Connect(RefreshPlayers)
+game.Players.PlayerRemoving:Connect(RefreshPlayers)
+
+local BountyBtn = Instance.new("TextButton", BountyTab)
+BountyBtn.Size = UDim2.new(1,-20,0,40)
+BountyBtn.Position = UDim2.new(0,10,1,-50)
+BountyBtn.Text = "Start Bounty"
+BountyBtn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+BountyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+local bounty = false
+
+BountyBtn.MouseButton1Click:Connect(function()
+    if not SelectedPlayer then return end
+
+    bounty = not bounty
+    BountyBtn.Text = bounty and "Stop Bounty" or "Start Bounty"
+
+    task.spawn(AutoClick)
+
+    while bounty do
+        if SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = SelectedPlayer.Character.HumanoidRootPart.Position + Vector3.new(0,-5,0)
+            FlyTo(pos)
+        end
+        task.wait(0.1)
+    end
+end)
